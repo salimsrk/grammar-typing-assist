@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/overlay_card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="14dp"
+    android:background="@drawable/overlay_card_background"
+    android:elevation="8dp">
+
+    <TextView
+        android:id="@+id/overlay_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Checking..."
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/overlay_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textColor="#E8ECFF"
+        android:textSize="13sp"
+        android:maxLines="4"
+        android:ellipsize="end" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal"
+        android:gravity="end">
+
+        <TextView
+            android:id="@+id/btn_dismiss"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Dismiss"
+            android:textColor="#C7D0FF"
+            android:padding="8dp"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/btn_rewrite"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="✨ Rewrite"
+            android:textColor="#FFD166"
+            android:padding="8dp"
+            android:textStyle="bold"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/btn_apply"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="Apply fix"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/overlay_button_background"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="8dp"
+            android:textStyle="bold"
+            android:textSize="13sp" />
+    </LinearLayout>
+</LinearLayout>

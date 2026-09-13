@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TypeAssist</string>
+    <string name="accessibility_service_description">
+        Watches the text you type in other apps so it can point out grammar and
+        spelling mistakes, and offer to rewrite your message so it sounds more
+        natural. Text is only sent to the grammar/rewrite service when you are
+        actively typing.
+    </string>
+</resources>

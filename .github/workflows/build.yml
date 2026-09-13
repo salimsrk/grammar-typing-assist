@@ -1,0 +1,62 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # This repo's android/ folder does not commit the Gradle wrapper jar
+      # (it's a binary file). `flutter create` on a throwaway project copies
+      # the wrapper that ships inside the Flutter SDK itself, so no extra
+      # download is needed - we just borrow those three files.
+      - name: Generate Gradle wrapper
+        run: |
+          flutter create --platforms=android --org=com.salimsrk --project-name=scaffold /tmp/scaffold
+          mkdir -p android/gradle/wrapper
+          cp /tmp/scaffold/android/gradlew android/gradlew
+          cp /tmp/scaffold/android/gradlew.bat android/gradlew.bat
+          cp /tmp/scaffold/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/gradle-wrapper.jar
+          chmod +x android/gradlew
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Build release APK
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: flutter build apk --release
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TypeAssist-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Publish GitHub Release with the APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: TypeAssist build #${{ github.run_number }}
+          files: build/app/outputs/flutter-apk/app-release.apk
