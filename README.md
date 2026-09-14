@@ -106,9 +106,14 @@ flutter build apk --release
 
 ## Notes / limitations
 
-- The release APK is signed with the Flutter debug keystore, which is fine
-  for personal sideloading and is what keeps this at zero cost. Add a real
-  signing config before publishing anywhere public (e.g. the Play Store).
+- The release APK is signed with a fixed keystore committed at
+  `android/app/typeassist-debug.keystore` (password `typeassist123`).
+  This keeps every build - from your laptop or from GitHub Actions -
+  signed identically, so a newer APK always installs as an update instead
+  of failing with "App not installed" (which happens when two APKs are
+  signed with different keys). This keystore is for personal sideloading
+  only; generate a real, private signing key before publishing anywhere
+  public (e.g. the Play Store), and never reuse this one for that.
 - LanguageTool's free public API is rate-limited (~20 requests/minute) -
   plenty for one person's normal typing.
 - Gemini's free tier has a daily quota; if Rewrite stops working, you've

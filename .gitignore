@@ -14,6 +14,9 @@ android/key.properties
 android/.gradle/
 android/app/*.jks
 android/app/*.keystore
+# ...except the committed sideload-signing keystore used by CI/local builds
+# to keep every APK's signature consistent (see app/build.gradle).
+!android/app/typeassist-debug.keystore
 android/gradle/wrapper/gradle-wrapper.jar
 *.apk
 *.aab

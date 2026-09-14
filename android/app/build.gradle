@@ -38,6 +38,21 @@ android {
         buildConfig true
     }
 
+    // A fixed, committed keystore (NOT a Play Store release key - just a
+    // consistent signature for sideloaded installs). Using this instead of
+    // the machine-local debug keystore means every APK built anywhere (your
+    // laptop, GitHub Actions, another machine) is signed identically, so
+    // installing a newer build always works as an update instead of
+    // failing with "App not installed" from a signature mismatch.
+    signingConfigs {
+        release {
+            storeFile file("typeassist-debug.keystore")
+            storePassword "typeassist123"
+            keyAlias "typeassist"
+            keyPassword "typeassist123"
+        }
+    }
+
     defaultConfig {
         applicationId "com.salimsrk.typeassist"
         minSdkVersion 26
@@ -49,10 +64,12 @@ android {
 
     buildTypes {
         release {
-            // Using debug signing so `flutter build apk --release` produces an
-            // installable APK with zero cost / no keystore setup required.
-            // Swap in a real signing config before publishing to the Play Store.
-            signingConfig signingConfigs.debug
+            // See signingConfigs.release above - keeps every build's
+            // signature identical so updates install cleanly. Swap in a
+            // real, private signing config before publishing to the Play
+            // Store (this one being public in the repo is fine for
+            // sideloading, but must never be used for a real release).
+            signingConfig signingConfigs.release
             minifyEnabled false
             shrinkResources false
         }
