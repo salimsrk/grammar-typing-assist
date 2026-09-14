@@ -37,16 +37,30 @@ jobs:
       # and everything under app/src/ are ours and are left untouched.
       - name: Sync Gradle/AGP versions from the installed Flutter SDK
         run: |
+          set -e
           flutter create --platforms=android --org=com.salimsrk --project-name=scaffold /tmp/scaffold
           mkdir -p android/gradle/wrapper
           cp /tmp/scaffold/android/gradlew android/gradlew
           cp /tmp/scaffold/android/gradlew.bat android/gradlew.bat
           cp /tmp/scaffold/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/gradle-wrapper.jar
           cp /tmp/scaffold/android/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/gradle-wrapper.properties
-          cp /tmp/scaffold/android/settings.gradle android/settings.gradle
-          cp /tmp/scaffold/android/build.gradle android/build.gradle
-          cp /tmp/scaffold/android/gradle.properties android/gradle.properties
           chmod +x android/gradlew
+
+          # Recent Flutter versions switched the top-level Android build
+          # files from Groovy (settings.gradle / build.gradle) to Kotlin DSL
+          # (settings.gradle.kts / build.gradle.kts). Rather than guess which
+          # one this Flutter version uses, remove both possible extensions
+          # and copy back whichever one the scaffold actually produced.
+          rm -f android/settings.gradle android/settings.gradle.kts
+          rm -f android/build.gradle android/build.gradle.kts
+          for f in settings.gradle settings.gradle.kts build.gradle build.gradle.kts gradle.properties; do
+            if [ -f "/tmp/scaffold/android/$f" ]; then
+              cp "/tmp/scaffold/android/$f" "android/$f"
+            fi
+          done
+
+          echo "--- android/ now contains ---"
+          find android -maxdepth 2 -type f | sort
 
       - name: Install Flutter dependencies
         run: flutter pub get
