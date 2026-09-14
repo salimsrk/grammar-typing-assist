@@ -47,11 +47,19 @@ class TypingAssistService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         try {
             Log.d(TAG, "onAccessibilityEvent type=${event.eventType} pkg=${event.packageName}")
+
+            // Our own floating overlay card is itself a window, so adding/
+            // removing it can generate window-state/focus events for our
+            // own package. If we don't ignore those, the card hides itself
+            // within a second of appearing. Only react to events coming
+            // from OTHER apps.
+            if (event.packageName?.toString() == applicationContext.packageName) return
+
             when (event.eventType) {
                 AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> handleTextChanged(event)
-                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-                AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
-                    // Hide any stale suggestion when the user moves to a new field/app.
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                    // A real app/window switch (not just focus moving within
+                    // the same screen) - hide any stale suggestion.
                     pendingCheck?.let { mainHandler.removeCallbacks(it) }
                     overlayManager?.hide()
                 }
