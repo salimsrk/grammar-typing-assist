@@ -23,6 +23,14 @@ class TypingAssistService : AccessibilityService() {
     private var pendingCheck: Runnable? = null
     private val debounceMillis = 900L
 
+    // Auto-hide the suggestion card after a while if the user just leaves it
+    // on screen without tapping anything. We deliberately do NOT hide it on
+    // every TYPE_WINDOW_STATE_CHANGED event - the on-screen keyboard itself
+    // fires these constantly (e.g. as its suggestion strip updates), which
+    // was making the card disappear within a second of appearing.
+    private var autoHide: Runnable? = null
+    private val autoHideDelayMillis = 12000L
+
     private var overlayManager: OverlayManager? = null
     private var lastSourceNode: AccessibilityNodeInfo? = null
     private var lastOriginalText: String = ""
@@ -57,12 +65,6 @@ class TypingAssistService : AccessibilityService() {
 
             when (event.eventType) {
                 AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> handleTextChanged(event)
-                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                    // A real app/window switch (not just focus moving within
-                    // the same screen) - hide any stale suggestion.
-                    pendingCheck?.let { mainHandler.removeCallbacks(it) }
-                    overlayManager?.hide()
-                }
                 else -> Unit
             }
         } catch (t: Throwable) {
@@ -72,6 +74,19 @@ class TypingAssistService : AccessibilityService() {
 
     override fun onInterrupt() {
         overlayManager?.hide()
+    }
+
+    /** (Re)start the "auto-dismiss if untouched" timer for whatever is currently showing. */
+    private fun scheduleAutoHide() {
+        autoHide?.let { mainHandler.removeCallbacks(it) }
+        val runnable = Runnable { overlayManager?.hide() }
+        autoHide = runnable
+        mainHandler.postDelayed(runnable, autoHideDelayMillis)
+    }
+
+    private fun cancelAutoHide() {
+        autoHide?.let { mainHandler.removeCallbacks(it) }
+        autoHide = null
     }
 
     private fun handleTextChanged(event: AccessibilityEvent) {
@@ -85,6 +100,7 @@ class TypingAssistService : AccessibilityService() {
             // Don't bother checking our own app or very short fragments.
             if (packageName == applicationContext.packageName) return
             if (text.trim().length < 4) {
+                cancelAutoHide()
                 overlayManager?.hide()
                 return
             }
@@ -107,6 +123,7 @@ class TypingAssistService : AccessibilityService() {
         Log.d(TAG, "runGrammarCheck pkg=$packageName")
         try {
             overlayManager?.showChecking()
+            scheduleAutoHide()
         } catch (t: Throwable) {
             Log.e(TAG, "showChecking crashed", t)
         }
@@ -118,24 +135,27 @@ class TypingAssistService : AccessibilityService() {
                     Log.d(TAG, "grammar onResult issueCount=${result?.issueCount}")
                     if (requestId != this.requestId) return@post // a newer keystroke made this stale
                     if (result == null) {
+                        cancelAutoHide()
                         overlayManager?.hide()
                         return@post
                     }
                     if (result.issueCount == 0 || result.correctedText == text) {
+                        cancelAutoHide()
                         overlayManager?.showNoIssues()
                         return@post
                     }
                     overlayManager?.showGrammarSuggestion(
                         issueCount = result.issueCount,
                         offline = !online,
-                        onApply = { applyText(result.correctedText) },
+                        onApply = { cancelAutoHide(); applyText(result.correctedText) },
                         onRewrite = {
                             if (NetworkUtils.isOnline(applicationContext)) {
                                 runRewrite(text, packageName, requestId)
                             }
                         },
-                        onDismiss = { overlayManager?.hide() }
+                        onDismiss = { cancelAutoHide(); overlayManager?.hide() }
                     )
+                    scheduleAutoHide()
                 } catch (t: Throwable) {
                     Log.e(TAG, "onResult handling crashed", t)
                 }
@@ -154,6 +174,7 @@ class TypingAssistService : AccessibilityService() {
     private fun runRewrite(text: String, packageName: String, requestId: Int) {
         try {
             overlayManager?.showRewriting()
+            scheduleAutoHide()
         } catch (t: Throwable) {
             Log.e(TAG, "showRewriting crashed", t)
         }
@@ -163,13 +184,15 @@ class TypingAssistService : AccessibilityService() {
                     if (requestId != this.requestId) return@post
                     if (rewritten.isNullOrBlank()) {
                         overlayManager?.showError("Couldn't rewrite right now. Check your Gemini API key / internet connection.")
+                        scheduleAutoHide()
                         return@post
                     }
                     overlayManager?.showRewriteResult(
                         rewritten = rewritten,
-                        onApply = { applyText(rewritten) },
-                        onDismiss = { overlayManager?.hide() }
+                        onApply = { cancelAutoHide(); applyText(rewritten) },
+                        onDismiss = { cancelAutoHide(); overlayManager?.hide() }
                     )
+                    scheduleAutoHide()
                 } catch (t: Throwable) {
                     Log.e(TAG, "rewrite result handling crashed", t)
                 }
