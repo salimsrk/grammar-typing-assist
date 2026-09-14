@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'voice_assistant_page.dart';
+
 void main() {
   runApp(const TypeAssistApp());
 }
@@ -138,6 +140,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               onPressed: _refreshStatus,
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh status'),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.tonalIcon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const VoiceAssistantPage()),
+                );
+              },
+              icon: const Icon(Icons.mic),
+              label: const Text('Voice Assistant (Tamil / English)'),
             ),
             const SizedBox(height: 32),
             Text(

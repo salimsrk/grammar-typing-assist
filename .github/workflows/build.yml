@@ -28,17 +28,39 @@ jobs:
           cache: true
 
       # This repo's android/ folder does not commit the Gradle wrapper jar
-      # (it's a binary file). `flutter create` on a throwaway project copies
-      # the wrapper that ships inside the Flutter SDK itself, so no extra
-      # download is needed - we just borrow those three files.
-      - name: Generate Gradle wrapper
+      # (it's a binary file), and the Gradle/AGP/Kotlin versions that the
+      # currently-installed Flutter SDK requires can change with every
+      # Flutter release. So instead of pinning those versions by hand, we
+      # scaffold a throwaway project with the SDK that was just installed
+      # above and borrow its generic build files - they always match
+      # whatever this Flutter version actually needs. Only app/build.gradle
+      # and everything under app/src/ are ours and are left untouched.
+      - name: Sync Gradle/AGP versions from the installed Flutter SDK
         run: |
+          set -e
           flutter create --platforms=android --org=com.salimsrk --project-name=scaffold /tmp/scaffold
           mkdir -p android/gradle/wrapper
           cp /tmp/scaffold/android/gradlew android/gradlew
           cp /tmp/scaffold/android/gradlew.bat android/gradlew.bat
           cp /tmp/scaffold/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/gradle-wrapper.jar
+          cp /tmp/scaffold/android/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/gradle-wrapper.properties
           chmod +x android/gradlew
+
+          # Recent Flutter versions switched the top-level Android build
+          # files from Groovy (settings.gradle / build.gradle) to Kotlin DSL
+          # (settings.gradle.kts / build.gradle.kts). Rather than guess which
+          # one this Flutter version uses, remove both possible extensions
+          # and copy back whichever one the scaffold actually produced.
+          rm -f android/settings.gradle android/settings.gradle.kts
+          rm -f android/build.gradle android/build.gradle.kts
+          for f in settings.gradle settings.gradle.kts build.gradle build.gradle.kts gradle.properties; do
+            if [ -f "/tmp/scaffold/android/$f" ]; then
+              cp "/tmp/scaffold/android/$f" "android/$f"
+            fi
+          done
+
+          echo "--- android/ now contains ---"
+          find android -maxdepth 2 -type f | sort
 
       - name: Install Flutter dependencies
         run: flutter pub get
@@ -46,7 +68,7 @@ jobs:
       - name: Build release APK
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: flutter build apk --release
+        run: flutter build apk --release --dart-define=GEMINI_API_KEY=$GEMINI_API_KEY
 
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4

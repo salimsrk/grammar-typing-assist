@@ -14,6 +14,10 @@ anywhere you type - without replacing your keyboard.
   API and get a more natural, "humanized" version - tone adapts to the app
   (casual for WhatsApp, professional for Gmail/LinkedIn).
 - Tap **Use this** to replace your text with the rewritten version.
+- Open the app and tap **Voice Assistant** to speak a request in Tamil,
+  English, or mixed Tanglish (e.g. "enaku oru simple leave mail draft
+  pannunga") and get the requested content written out in English, ready
+  to copy into any app.
 
 Nothing is checked until you pause typing, and only the text in the field
 you're actively editing is ever sent to LanguageTool/Gemini.
@@ -53,12 +57,20 @@ build time from a GitHub Actions secret.
    repository secret**.
 3. Name: `GEMINI_API_KEY`, value: your key. Save.
 
-For a local build on your own machine, instead put it in
-`android/local.properties` (already git-ignored):
+For a local build on your own machine:
 
-```
-GEMINI_API_KEY=AIzaSy...
-```
+- Native side (Rewrite button): put it in `android/local.properties`
+  (already git-ignored):
+  ```
+  GEMINI_API_KEY=AIzaSy...
+  ```
+- Dart side (Voice Assistant): pass it on the command line instead, since
+  Dart code can't read `local.properties`:
+  ```
+  flutter build apk --release --dart-define=GEMINI_API_KEY=AIzaSy...
+  # or, while developing:
+  flutter run --dart-define=GEMINI_API_KEY=AIzaSy...
+  ```
 
 Grammar/spelling checking (LanguageTool) needs no key at all.
 
@@ -87,6 +99,8 @@ flutter build apk --release
    Accessibility settings. Turn the **TypeAssist** toggle on.
 4. Go to WhatsApp/Gmail/any app and start typing - the suggestion card
    appears above the keyboard when something's worth flagging.
+5. For voice commands, open **TypeAssist -> Voice Assistant** and allow
+   the microphone permission when asked (needed once).
 
 ## Notes / limitations
 
