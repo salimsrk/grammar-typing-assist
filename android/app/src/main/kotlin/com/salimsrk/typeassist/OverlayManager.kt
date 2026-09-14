@@ -3,11 +3,14 @@ package com.salimsrk.typeassist
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
+import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
+
+private const val TAG = "TypeAssistOverlay"
 
 /**
  * Shows / hides the small floating suggestion card above the keyboard.
@@ -137,7 +140,16 @@ class OverlayManager(private val context: Context) {
         params.gravity = Gravity.TOP
         params.y = 60
 
-        windowManager.addView(view, params)
+        try {
+            windowManager.addView(view, params)
+            Log.d(TAG, "Overlay view added successfully")
+        } catch (t: Throwable) {
+            // If this throws (some OEMs restrict overlay windows even for
+            // accessibility services), don't crash the whole service - just
+            // log it and hand back the unattached view so callers can still
+            // safely call findViewById on it without the app dying.
+            Log.e(TAG, "Failed to add overlay view", t)
+        }
         overlayView = view
         return view
     }

@@ -4,8 +4,11 @@ import android.accessibilityservice.AccessibilityService
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+
+private const val TAG = "TypeAssistSvc"
 
 /**
  * Background service that watches text fields in every app (WhatsApp, Gmail,
@@ -28,19 +31,29 @@ class TypingAssistService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        overlayManager = OverlayManager(applicationContext)
+        Log.d(TAG, "onServiceConnected")
+        try {
+            overlayManager = OverlayManager(applicationContext)
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to create OverlayManager", t)
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        when (event.eventType) {
-            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> handleTextChanged(event)
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
-                // Hide any stale suggestion when the user moves to a new field/app.
-                pendingCheck?.let { mainHandler.removeCallbacks(it) }
-                overlayManager?.hide()
+        try {
+            Log.d(TAG, "onAccessibilityEvent type=${event.eventType} pkg=${event.packageName}")
+            when (event.eventType) {
+                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> handleTextChanged(event)
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+                AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
+                    // Hide any stale suggestion when the user moves to a new field/app.
+                    pendingCheck?.let { mainHandler.removeCallbacks(it) }
+                    overlayManager?.hide()
+                }
+                else -> Unit
             }
-            else -> Unit
+        } catch (t: Throwable) {
+            Log.e(TAG, "onAccessibilityEvent crashed", t)
         }
     }
 
@@ -49,54 +62,70 @@ class TypingAssistService : AccessibilityService() {
     }
 
     private fun handleTextChanged(event: AccessibilityEvent) {
-        val source = event.source ?: return
-        val text = source.text?.toString().orEmpty()
-        val packageName = event.packageName?.toString().orEmpty()
+        try {
+            val source = event.source ?: return
+            val text = source.text?.toString().orEmpty()
+            val packageName = event.packageName?.toString().orEmpty()
 
-        // Don't bother checking our own app or very short fragments.
-        if (packageName == applicationContext.packageName) return
-        if (text.trim().length < 4) {
-            overlayManager?.hide()
-            return
+            Log.d(TAG, "handleTextChanged pkg=$packageName textLen=${text.length}")
+
+            // Don't bother checking our own app or very short fragments.
+            if (packageName == applicationContext.packageName) return
+            if (text.trim().length < 4) {
+                overlayManager?.hide()
+                return
+            }
+
+            lastSourceNode = source
+            lastOriginalText = text
+            lastPackageName = packageName
+
+            pendingCheck?.let { mainHandler.removeCallbacks(it) }
+            val thisRequestId = ++requestId
+            val runnable = Runnable { runGrammarCheck(text, packageName, thisRequestId) }
+            pendingCheck = runnable
+            mainHandler.postDelayed(runnable, debounceMillis)
+        } catch (t: Throwable) {
+            Log.e(TAG, "handleTextChanged crashed", t)
         }
-
-        lastSourceNode = source
-        lastOriginalText = text
-        lastPackageName = packageName
-
-        pendingCheck?.let { mainHandler.removeCallbacks(it) }
-        val thisRequestId = ++requestId
-        val runnable = Runnable { runGrammarCheck(text, packageName, thisRequestId) }
-        pendingCheck = runnable
-        mainHandler.postDelayed(runnable, debounceMillis)
     }
 
     private fun runGrammarCheck(text: String, packageName: String, requestId: Int) {
-        overlayManager?.showChecking()
+        Log.d(TAG, "runGrammarCheck pkg=$packageName")
+        try {
+            overlayManager?.showChecking()
+        } catch (t: Throwable) {
+            Log.e(TAG, "showChecking crashed", t)
+        }
         val online = NetworkUtils.isOnline(applicationContext)
 
         val onResult: (GrammarApi.GrammarResult?) -> Unit = { result ->
             mainHandler.post {
-                if (requestId != this.requestId) return@post // a newer keystroke made this stale
-                if (result == null) {
-                    overlayManager?.hide()
-                    return@post
+                try {
+                    Log.d(TAG, "grammar onResult issueCount=${result?.issueCount}")
+                    if (requestId != this.requestId) return@post // a newer keystroke made this stale
+                    if (result == null) {
+                        overlayManager?.hide()
+                        return@post
+                    }
+                    if (result.issueCount == 0 || result.correctedText == text) {
+                        overlayManager?.showNoIssues()
+                        return@post
+                    }
+                    overlayManager?.showGrammarSuggestion(
+                        issueCount = result.issueCount,
+                        offline = !online,
+                        onApply = { applyText(result.correctedText) },
+                        onRewrite = {
+                            if (NetworkUtils.isOnline(applicationContext)) {
+                                runRewrite(text, packageName, requestId)
+                            }
+                        },
+                        onDismiss = { overlayManager?.hide() }
+                    )
+                } catch (t: Throwable) {
+                    Log.e(TAG, "onResult handling crashed", t)
                 }
-                if (result.issueCount == 0 || result.correctedText == text) {
-                    overlayManager?.showNoIssues()
-                    return@post
-                }
-                overlayManager?.showGrammarSuggestion(
-                    issueCount = result.issueCount,
-                    offline = !online,
-                    onApply = { applyText(result.correctedText) },
-                    onRewrite = {
-                        if (NetworkUtils.isOnline(applicationContext)) {
-                            runRewrite(text, packageName, requestId)
-                        }
-                    },
-                    onDismiss = { overlayManager?.hide() }
-                )
             }
         }
 
@@ -110,31 +139,43 @@ class TypingAssistService : AccessibilityService() {
     }
 
     private fun runRewrite(text: String, packageName: String, requestId: Int) {
-        overlayManager?.showRewriting()
+        try {
+            overlayManager?.showRewriting()
+        } catch (t: Throwable) {
+            Log.e(TAG, "showRewriting crashed", t)
+        }
         RewriteApi.rewrite(text, packageName) { rewritten ->
             mainHandler.post {
-                if (requestId != this.requestId) return@post
-                if (rewritten.isNullOrBlank()) {
-                    overlayManager?.showError("Couldn't rewrite right now. Check your Gemini API key / internet connection.")
-                    return@post
+                try {
+                    if (requestId != this.requestId) return@post
+                    if (rewritten.isNullOrBlank()) {
+                        overlayManager?.showError("Couldn't rewrite right now. Check your Gemini API key / internet connection.")
+                        return@post
+                    }
+                    overlayManager?.showRewriteResult(
+                        rewritten = rewritten,
+                        onApply = { applyText(rewritten) },
+                        onDismiss = { overlayManager?.hide() }
+                    )
+                } catch (t: Throwable) {
+                    Log.e(TAG, "rewrite result handling crashed", t)
                 }
-                overlayManager?.showRewriteResult(
-                    rewritten = rewritten,
-                    onApply = { applyText(rewritten) },
-                    onDismiss = { overlayManager?.hide() }
-                )
             }
         }
     }
 
     private fun applyText(newText: String) {
-        val node = lastSourceNode ?: return
-        val arguments = Bundle()
-        arguments.putCharSequence(
-            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-            newText
-        )
-        node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-        overlayManager?.hide()
+        try {
+            val node = lastSourceNode ?: return
+            val arguments = Bundle()
+            arguments.putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                newText
+            )
+            node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+            overlayManager?.hide()
+        } catch (t: Throwable) {
+            Log.e(TAG, "applyText crashed", t)
+        }
     }
 }
