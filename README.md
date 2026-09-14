@@ -17,7 +17,9 @@ anywhere you type - without replacing your keyboard.
 - Open the app and tap **Voice Assistant** to speak a request in Tamil,
   English, or mixed Tanglish (e.g. "enaku oru simple leave mail draft
   pannunga") and get the requested content written out in English, ready
-  to copy into any app.
+  to copy into any app. Speech-to-text uses Android's own built-in voice
+  input (the same "Speak now" dialog your keyboard's mic button shows) -
+  no third-party plugin, no extra cost.
 
 Nothing is checked until you pause typing, and only the text in the field
 you're actively editing is ever sent to LanguageTool/Gemini.

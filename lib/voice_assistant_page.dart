@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 /// The Gemini API key is baked in at build time via --dart-define
 /// (see .github/workflows/build.yml). It is never committed to source.
@@ -11,11 +10,19 @@ const String _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
 enum _VoiceLanguage { tamil, english }
 
+enum _Stage { idle, listening, thinking, done, error }
+
 /// Lets the user speak a request in Tamil, English, or a mix of both
 /// ("Tanglish"), then asks Gemini to turn that spoken instruction into the
 /// requested content, written in clear English - e.g. speaking
 /// "enaku oru simple leave mail draft pannunga" produces a ready-to-copy
 /// leave email draft.
+///
+/// Speech-to-text uses Android's own built-in voice input (the same "Speak
+/// now" dialog the Google app / keyboard mic button shows) via a small
+/// native MethodChannel in MainActivity.kt - no third-party plugin, so
+/// there's nothing extra to keep compatible with future Android/Gradle
+/// versions.
 class VoiceAssistantPage extends StatefulWidget {
   const VoiceAssistantPage({super.key});
 
@@ -23,65 +30,18 @@ class VoiceAssistantPage extends StatefulWidget {
   State<VoiceAssistantPage> createState() => _VoiceAssistantPageState();
 }
 
-enum _Stage { idle, listening, thinking, done, error }
-
 class _VoiceAssistantPageState extends State<VoiceAssistantPage> {
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  static const _channel = MethodChannel('typeassist/voice');
 
   _VoiceLanguage _language = _VoiceLanguage.tamil;
   _Stage _stage = _Stage.idle;
   String _transcript = '';
   String _result = '';
   String _errorMessage = '';
-  bool _speechAvailable = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _initSpeech();
-  }
-
-  Future<void> _initSpeech() async {
-    final available = await _speech.initialize(
-      onStatus: _onSpeechStatus,
-      onError: (error) {
-        setState(() {
-          _stage = _Stage.error;
-          _errorMessage = 'Microphone error: ${error.errorMsg}';
-        });
-      },
-    );
-    setState(() => _speechAvailable = available);
-  }
-
-  void _onSpeechStatus(String status) {
-    if (status == 'done' || status == 'notListening') {
-      if (_stage == _Stage.listening) {
-        if (_transcript.trim().isEmpty) {
-          setState(() => _stage = _Stage.idle);
-        } else {
-          _askGemini(_transcript);
-        }
-      }
-    }
-  }
-
-  String get _localeId =>
-      _language == _VoiceLanguage.tamil ? 'ta_IN' : 'en_US';
+  String get _localeId => _language == _VoiceLanguage.tamil ? 'ta-IN' : 'en-IN';
 
   Future<void> _startListening() async {
-    if (!_speechAvailable) {
-      await _initSpeech();
-      if (!_speechAvailable) {
-        setState(() {
-          _stage = _Stage.error;
-          _errorMessage =
-              'Microphone permission is needed. Please allow it in Settings.';
-        });
-        return;
-      }
-    }
-
     setState(() {
       _stage = _Stage.listening;
       _transcript = '';
@@ -89,18 +49,25 @@ class _VoiceAssistantPageState extends State<VoiceAssistantPage> {
       _errorMessage = '';
     });
 
-    await _speech.listen(
-      localeId: _localeId,
-      onResult: (result) {
-        setState(() => _transcript = result.recognizedWords);
-      },
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 3),
-    );
-  }
+    try {
+      final transcript = await _channel.invokeMethod<String>(
+        'listen',
+        {'localeId': _localeId},
+      );
 
-  Future<void> _stopListening() async {
-    await _speech.stop();
+      if (transcript == null || transcript.trim().isEmpty) {
+        setState(() => _stage = _Stage.idle);
+        return;
+      }
+
+      setState(() => _transcript = transcript);
+      await _askGemini(transcript);
+    } on PlatformException catch (e) {
+      setState(() {
+        _stage = _Stage.error;
+        _errorMessage = e.message ?? 'Could not start voice recognition.';
+      });
+    }
   }
 
   Future<void> _askGemini(String transcript) async {
@@ -180,6 +147,8 @@ class _VoiceAssistantPageState extends State<VoiceAssistantPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isBusy = _stage == _Stage.listening || _stage == _Stage.thinking;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Voice Assistant')),
       body: SafeArea(
@@ -201,9 +170,11 @@ class _VoiceAssistantPageState extends State<VoiceAssistantPage> {
                   ),
                 ],
                 selected: {_language},
-                onSelectionChanged: (selection) {
-                  setState(() => _language = selection.first);
-                },
+                onSelectionChanged: isBusy
+                    ? null
+                    : (selection) {
+                        setState(() => _language = selection.first);
+                      },
               ),
               const SizedBox(height: 24),
               Expanded(
@@ -263,24 +234,27 @@ class _VoiceAssistantPageState extends State<VoiceAssistantPage> {
               ),
               const SizedBox(height: 12),
               GestureDetector(
-                onTap: _stage == _Stage.listening ? _stopListening : _startListening,
+                onTap: isBusy ? null : _startListening,
                 child: CircleAvatar(
                   radius: 38,
-                  backgroundColor: _stage == _Stage.listening
-                      ? Colors.red
+                  backgroundColor: isBusy
+                      ? Colors.grey
                       : Theme.of(context).colorScheme.primary,
-                  child: Icon(
-                    _stage == _Stage.listening ? Icons.stop : Icons.mic,
-                    color: Colors.white,
-                    size: 34,
-                  ),
+                  child: isBusy
+                      ? const Padding(
+                          padding: EdgeInsets.all(10),
+                          child: CircularProgressIndicator(color: Colors.white),
+                        )
+                      : const Icon(Icons.mic, color: Colors.white, size: 34),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 _stage == _Stage.listening
-                    ? 'Listening... tap to stop'
-                    : 'Tap to speak',
+                    ? 'Listening...'
+                    : _stage == _Stage.thinking
+                        ? 'Working on it...'
+                        : 'Tap to speak',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
