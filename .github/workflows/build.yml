@@ -70,15 +70,24 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: flutter build apk --release --dart-define=GEMINI_API_KEY=$GEMINI_API_KEY
 
+      # Every build's output is otherwise named the same
+      # ("app-release.apk"), which makes it easy to mix up an old download
+      # with the latest one. Renaming it per build number avoids that.
+      - name: Rename APK with the build number
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             "dist/TypeAssist-build${{ github.run_number }}.apk"
+
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: TypeAssist-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: dist/TypeAssist-build${{ github.run_number }}.apk
 
       - name: Publish GitHub Release with the APK
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: TypeAssist build #${{ github.run_number }}
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: dist/TypeAssist-build${{ github.run_number }}.apk
