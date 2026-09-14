@@ -33,7 +33,12 @@ class TypingAssistService : AccessibilityService() {
         super.onServiceConnected()
         Log.d(TAG, "onServiceConnected")
         try {
-            overlayManager = OverlayManager(applicationContext)
+            // Important: TYPE_ACCESSIBILITY_OVERLAY windows must be created
+            // using the AccessibilityService's own context ("this"), not
+            // applicationContext - applicationContext has no valid window
+            // token for this window type and addView() throws
+            // BadTokenException ("token null is not valid").
+            overlayManager = OverlayManager(this)
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to create OverlayManager", t)
         }
